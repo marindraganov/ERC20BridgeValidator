@@ -4,7 +4,7 @@ const ethers = require("ethers");
 const app = express();
 
 app.get('/', (req, res) => {
-  res.send("Hello to The ERC20Validator! use /mint?sourceChainId={nativeChainID}&txHash={yourTx} /burn?sourceChainId={wrappedTknChainID}&txHash={yourTx}");
+  res.send("Hello to The ERC20Validator! use /mint?sourceChainId={nativeChainID}&txHash={yourTx} /unlock?sourceChainId={wrappedTknChainID}&txHash={yourTx}");
 });
 
 app.get('/mint', (req, res) => {
@@ -17,9 +17,13 @@ app.get('/mint', (req, res) => {
   }
   let abi = ["event TokenLocked(address indexed user, uint amount, address tknAddress, string tknName, string tknSymbol,uint targetChainID)"]
   let iface = new ethers.utils.Interface(abi);
-  console.log("test")
+
   provider.getTransactionReceipt(txHash)
     .then(async (tx) => {
+      if(tx.to != BRIDGE_ADDRESS[sourceChainId]){
+        res.send("The transaction is not to the valid bridge address!");
+      }
+
       let log;
       for (let i in tx.logs) {
         try{
@@ -62,7 +66,7 @@ app.get('/mint', (req, res) => {
     }).catch((er) => res.send(er))
 });
 
-app.get('/burn', (req, res) => {
+app.get('/unlock', (req, res) => {
   var sourceChainId = req.query.sourceChainId;
   var txHash = req.query.txHash;
   const provider =  getProvider(sourceChainId);
@@ -74,6 +78,10 @@ app.get('/burn', (req, res) => {
   let iface = new ethers.utils.Interface(abi);
   provider.getTransactionReceipt(txHash)
     .then(async (tx) => {
+      if(tx.to != BRIDGE_ADDRESS[sourceChainId]){
+        res.send("The transaction is not to the valid bridge address!");
+      }
+
       let log;
       for (let i in tx.logs) {
         try{
@@ -138,6 +146,11 @@ const getSigner = (targetChainID) => {
     return new ethers.Wallet(process.env.PRIVATE_KEY_RINKEBY)
   }
 }
+
+const BRIDGE_ADDRESS = {
+  3: "0x5ffE3D69f6bF1f651eeb808D4bA972f7719b0630",
+  4: "0xC6Dd3324Db4F3e740D260D258Ac760339856566A"
+};
 
 const port = parseInt(process.env.PORT) || 8080;
 app.listen(port, () => {
