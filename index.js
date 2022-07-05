@@ -4,8 +4,7 @@ const ethers = require("ethers");
 const app = express();
 
 app.get('/', (req, res) => {
-  let testKey = process.env.TEST_PRIVATE_KEY;
-  res.send("Hello to The ERC20Validator" + testKey);
+  res.send("Hello to The ERC20Validator! use /mint?sourceChainId={nativeChainID}&txHash={yourTx} /burn?sourceChainId={wrappedTknChainID}&txHash={yourTx}");
 });
 
 app.get('/mint', (req, res) => {
@@ -32,8 +31,8 @@ app.get('/mint', (req, res) => {
       }
       console.log(event)
       const claimHash = ethers.utils.solidityKeccak256(
-        [ "string", "address", "uint", "address", "string", "string", "bytes32"], 
-        [ "claimMint", event.user, event.amount, event.tknAddress, event.tknName, event.tknSymbol, txHash])
+        [ "string", "address", "uint", "address", "uint", "string", "string", "bytes32"], 
+        [ "claimMint", event.user, event.amount, event.tknAddress, sourceChainId, event.tknName, event.tknSymbol, txHash])
       
       const signer = getSigner(event.targetChainID)
       const sig = await signer.signMessage(ethers.utils.arrayify(claimHash));
@@ -42,6 +41,48 @@ app.get('/mint', (req, res) => {
       res.send({
         ...event,
         txHash: txHash,
+        nativeChainId: sourceChainId,
+        claimHash: claimHash,
+        v: sigSplit.v,
+        r: sigSplit.r, 
+        s: sigSplit.s
+      })
+    })
+});
+
+app.get('/burn', (req, res) => {
+  var sourceChainId = req.query.sourceChainId;
+  var txHash = req.query.txHash;
+  const provider =  getProvider(sourceChainId);
+  if (!provider) {
+    res.send("invalid source chain");
+    return;
+  }
+  let abi = ["event TokenBurned(address indexed user, uint amount, address nativeTknAddress, uint nativeChainId)"]
+  let iface = new ethers.utils.Interface(abi);
+  provider.getTransactionReceipt(txHash)
+    .then(async (tx) => {
+      const log = iface.parseLog(tx.logs[2]);
+
+      const event = {
+        user: ethers.utils.getAddress(log.args.user),
+        amount: log.args.amount.toString(),
+        nativeTknAddress: ethers.utils.getAddress(log.args.nativeTknAddress),
+        nativeChainId: log.args.nativeChainId.toString()
+      }
+
+      const claimHash = ethers.utils.solidityKeccak256(
+        [ "string", "address", "uint", "address", "bytes32"], 
+        [ "claimUnlock", event.user, event.amount, event.nativeTknAddress, txHash])
+      
+      const signer = getSigner(event.nativeChainId)
+      const sig = await signer.signMessage(ethers.utils.arrayify(claimHash));
+      const sigSplit = ethers.utils.splitSignature(sig);
+
+      res.send({
+        ...event,
+        txHash: txHash,
+        nativeChainId: sourceChainId,
         claimHash: claimHash,
         v: sigSplit.v,
         r: sigSplit.r, 
