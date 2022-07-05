@@ -17,9 +17,21 @@ app.get('/mint', (req, res) => {
   }
   let abi = ["event TokenLocked(address indexed user, uint amount, address tknAddress, string tknName, string tknSymbol,uint targetChainID)"]
   let iface = new ethers.utils.Interface(abi);
+  console.log("test")
   provider.getTransactionReceipt(txHash)
     .then(async (tx) => {
-      const log = iface.parseLog(tx.logs[2]);
+      let log;
+      for (let i in tx.logs) {
+        try{
+          log = iface.parseLog(tx.logs[i]);
+          break;
+        }
+        catch{}
+      }
+
+      if(!log) {
+        res.send("This is not a lock transaction!")
+      }
 
       const event = {
         user: ethers.utils.getAddress(log.args.user),
@@ -29,7 +41,7 @@ app.get('/mint', (req, res) => {
         tknSymbol: log.args.tknSymbol,
         targetChainID: log.args.targetChainID.toString()
       }
-      console.log(event)
+
       const claimHash = ethers.utils.solidityKeccak256(
         [ "string", "address", "uint", "address", "uint", "string", "string", "bytes32"], 
         [ "claimMint", event.user, event.amount, event.tknAddress, sourceChainId, event.tknName, event.tknSymbol, txHash])
@@ -47,7 +59,7 @@ app.get('/mint', (req, res) => {
         r: sigSplit.r, 
         s: sigSplit.s
       })
-    })
+    }).catch((er) => res.send(er))
 });
 
 app.get('/burn', (req, res) => {
@@ -62,7 +74,18 @@ app.get('/burn', (req, res) => {
   let iface = new ethers.utils.Interface(abi);
   provider.getTransactionReceipt(txHash)
     .then(async (tx) => {
-      const log = iface.parseLog(tx.logs[2]);
+      let log;
+      for (let i in tx.logs) {
+        try{
+          log = iface.parseLog(tx.logs[i]);
+          break;
+        }
+        catch{}
+      }
+
+      if(!log) {
+        res.send("This is not a burn transaction!")
+      }
 
       const event = {
         user: ethers.utils.getAddress(log.args.user),
@@ -88,7 +111,7 @@ app.get('/burn', (req, res) => {
         r: sigSplit.r, 
         s: sigSplit.s
       })
-    })
+    }).catch((er) => res.send(er))
 });
 
 const getProvider = (targetChainID) => {
@@ -96,10 +119,10 @@ const getProvider = (targetChainID) => {
     return new ethers.providers.JsonRpcProvider("http://localhost:8545");
   }
   else if (targetChainID == 3) {
-    //return new ethers.providers.InfuraProvider("rinkeby", "40c2813049e44ec79cb4d7e0d18de173")
+    return new ethers.providers.InfuraProvider("ropsten", "310cd3dfc7aa4145a10b689ee5bfa044")
   }
   else if (targetChainID == 4) {
-    return new ethers.providers.InfuraProvider("rinkeby", "40c2813049e44ec79cb4d7e0d18de173")
+    return new ethers.providers.InfuraProvider("rinkeby", "310cd3dfc7aa4145a10b689ee5bfa044")
   }
 }
 
